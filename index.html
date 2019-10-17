@@ -109,7 +109,7 @@ librenms:
       - src: files/librenms/config.php.j2
         dest: ../config.php
     limit_openbasedir: False</code></pre>
- 	   <aside>Variables (groupe == appli)</aside>
+ 	   <aside class="notes">Variables (groupe == appli)</aside>
 	</section>
 	<section><h3>playbooks/librenms.yml</h3>
 		<pre><code class="data-line-numbers data-prevent-swipe"># librenms/freebsd
@@ -126,7 +126,7 @@ librenms:
       vars:
         # la variable vient du groupe librenms...
         mariadb: '{{ hostvars[groups["librenms"][0]].librenms.db }}'</code></pre>
-		<aside>Création BDD via group_vars</aside>
+		<aside class="notes">Création BDD via group_vars</aside>
 		</section>
 	<section><h3>playbooks/librenms.yml</h3>
 		<pre><code class="data-line-numbers data-prevent-swipe"># 3. l'appli
@@ -149,7 +149,7 @@ librenms:
         minute: '33'
         hour: '*/6'
         user: '_librenms'</code></pre>
-        <aside>Variables php, nginx (roles) — tout dans les README.md des roles</aside>
+        <aside class="notes">Variables php, nginx (roles) — tout dans les README.md des roles</aside>
 	</section>
 	<section><h3>playbooks/librenms.yml</h3>
 		<pre><code class="data-line-numbers data-prevent-swipe">  tasks:
@@ -247,7 +247,7 @@ librenms:
         - cronic
         - discovery-wrapper.py
         - poller-wrapper.py</code></pre>
-        <aside>Tâches spécifiques à l'appli</aside>
+        <aside class="notes">Tâches spécifiques à l'appli</aside>
 	</section>
 </section>
 <section id="et_alors">
@@ -257,14 +257,14 @@ librenms:
 			<li class="fragment">Rôles réutilisables ailleurs ?</li>
 			<li class="fragment">Utiliser ansible-vault ?</li>
 		</ul>
-		<aside>C'est moi qui pose les questions…
+		<aside class="notes">C'est moi qui pose les questions…
   Rôles: réutilisables si simples ou  {{ cloud-based }} ?</aside>
 	</section>
 	<section><h3>Questions ?</h3>
 		<ul>
 	  		<address><a href="mailto:Geoffroy Desvernay <dgeo+prezansible@centrale-marseille.fr>">Geoffroy Desvernay <dgeo@centrale-marseille.fr></a></address>
 		</ul>
-		<aside> ?</aside>
+		<aside class="notes"> ?</aside>
 	</section>
 </section>
 
