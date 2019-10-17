@@ -25,8 +25,249 @@
 	<body>
 		<div class="reveal">
 			<div class="slides">
-				<section>Slide 1</section>
-				<section>Slide 2</section>
+			
+<section id="intro">
+	<section>
+		<p><img src="images/logo.png" alt="Centrale Marseille" style="background:none; border:none; box-shadow:none;"/><span class="fragment"> et Geoffroy Desvernay</span></p>
+		<p class="fragment">présentent</p>
+	</section>
+	
+	<section>
+		<h1 style="color: red"><a href="https://ansible.com">ansible</a></h2>
+		<h2 class="fragment"><a href="https://galaxy.ansible.com/criecm">@Centrale Marseille</a></h2>
+		<h3 class="fragment">Pourquoi/Comment/Et alors ?</h3>
+	</section>
+	<section>
+		<h1>Pourquoi ?</h1>
+		<ul>
+			<li class="fragment">Petite équipe (1,5 ETP en 2018)</li>
+			<li class="fragment">PRA</li>
+			<li class="fragment">Besoin d'autonomie des != sysadmins</li>			
+			<li class="fragment">… et de tranquilité des sysadmins ;)</li>
+		</ul>
+	</section>
+</section>
+<section id="comment">
+	<section>
+      <h2>Approche</h2>
+  	    <ul>
+    		<li class="fragment">git all-in-one roles/inventories/playbooks<span class="fragment">(can kill cats)</span>
+    		<span class="fragment"> – With install script (~/.ansible.cfg)</span></li>
+			<li class="fragment">Ansible dev®(<a href="https://galaxy.ansible.com/criecm">roles</a>) <span class="fragment"> != Ansible User (write playbooks/inventory only)</span></li>
+			<li class="fragment">¡¡¡ Autonomie pour les Ansible User's !!!</li>
+		</ul>
+  </section>
+  <section id="details">
+		<h3>All-in-one git ?</h3>
+		<img class="fragment" src="images/2019.10.17-02.08.31.png"/>
+  </section>
+  <section>
+		<h3>inventory/inventest</h3>
+		<p class="fragment">par défaut on "joue" dans une infra de tests</p>
+		<p class="fragment"><code>ansible-playbook -i inventory</code></p>
+  </section>
+  <section>
+  		<h3>playbooks en vrac™</h3>
+  		<img class="fragment" src="images/2019.10.17-03.00.15.png"/>
+  </section>
+	<section>
+		<h3>playbooks simples…</h3>
+		<img class="fragment" src="images/2019.10.17-03.28.51.png"/>
+		<aside class="notes"><p>C'est toute l'infra DNS (hors source DNSSEC)</p>
+		<p>Données dans inventory</p></aside>
+	</section>
+	<section>
+		<h3>… ou moins simples</h3>
+		<img class="fragment" src="images/2019.10.17-03.26.15.png"/>
+	</section>
+</section>
+<section id="exemple">
+	<section><h3>inventory/group_vars/librenms.yml</h3>
+		<pre><code class="data-line-numbers data-prevent-swipe">---
+librenms:
+  db:
+    host: metrodb0.db
+    user: librenms
+    name: librenms
+    pass: UNPASSWD
+  app_key: 'base64:UNECLE'
+  admin:
+    user: cri
+    pass: MonPassAdmin
+    mail: mon_mail@chez.moi
+  site:
+    id: librenms
+    name: librenms.chez.moi
+    index: index.php
+    aliases:
+      - lnms.chez.moi
+    backend: php-fpm
+    rootdir: /usr/local/www/librenms/html
+    nginx_includes:
+      - librenms.inc.j2
+    configfiles:
+      - src: files/librenms/config.php.j2
+        dest: ../config.php
+    limit_openbasedir: False</code></pre>
+ 	   <aside>Variables (groupe == appli)</aside>
+	</section>
+	<section><h3>playbooks/librenms.yml</h3>
+		<pre><code class="data-line-numbers data-prevent-swipe"># librenms/freebsd
+# 1. charge l'inventory pour le groupe librenms
+- hosts: librenms
+
+# 2. la BDD
+- hosts: librenmsdb
+  tasks:
+    - name: DB created
+      include_role:
+        name: criecm.mariadb
+        tasks_from: db.yml
+      vars:
+        # la variable vient du groupe librenms...
+        mariadb: '{{ hostvars[groups["librenms"][0]].librenms.db }}'</code></pre>
+		<aside>Création BDD via group_vars</aside>
+		</section>
+	<section><h3>playbooks/librenms.yml</h3>
+		<pre><code class="data-line-numbers data-prevent-swipe"># 3. l'appli
+- hosts: librenms
+  roles:
+    - criecm.common
+    - criecm.nginx
+    - criecm.php-fpm
+  vars:
+    php_version: 7.2
+    sites:
+      # la variable "sites" suit la doc des modules criecm.nginx et criecm.php-fpm
+      - '{{ librenms.site }}'
+    codedir: /usr/local/www/librenms
+#    proxified_by:
+#      - 10.2.0.
+    crons:
+      - name: 'discovery-wrapper.py'
+        job: '/usr/local/www/librenms/cronic /usr/local/www/librenms/discovery-wrapper.py 1'
+        minute: '33'
+        hour: '*/6'
+        user: '_librenms'</code></pre>
+        <aside>Variables php, nginx (roles) — tout dans les README.md des roles</aside>
+	</section>
+	<section><h3>playbooks/librenms.yml</h3>
+		<pre><code class="data-line-numbers data-prevent-swipe">  tasks:
+    - name: install librenms
+      pkgng:
+        name: librenms
+        state: latest
+      register: install
+    - name: chown dirs
+      file:
+        path: '{{ item }}'
+        state: directory
+        owner: '_{{ librenms.site.id }}'
+        group: '{{ www_user }}'
+        mode: 'u+rwX,g=rX,o-rwx'
+        recurse: yes
+      loop:
+        - '{{ codedir }}/logs'
+        - /var/log/librenms
+        - /var/db/librenms
+        - '{{ codedir }}/storage'
+    - name: .env
+      template:
+        src: files/librenms/dotenv.j2
+        dest: '{{ codedir }}/.env'
+        backup: yes
+      register: newconf
+    - name: validate config
+      command: 'php validate.php'
+      register: validconf
+      args:
+        chdir: '{{ codedir }}'
+      when: newconf.changed
+    - name: get key
+      command: 'grep ^APP_KEY=[a-zA-Z0-9] {{ codedir }}/.env'
+      failed_when: False
+      register: appkey
+    - name: gen key
+      command: 'php artisan key:generate'
+      args:
+        chdir: '{{ codedir }}'
+      when: newconf.changed and appkey.rc != 0
+#    - name: db schema
+#      shell: 'php artisan update -n'
+#      args:
+#        chdir: '{{ codedir }}'
+#      when: newconf.changed or install.changed
+    - name: librenms admin user
+      command: 'php artisan user:add -r admin -e {{ librenms.admin.mail }} -n -p "{{ librenms.admin.pass }}" -vvv {{ librenms.admin.user }}'
+      args:
+        chdir: '{{ codedir }}'
+      when: newconf.changed
+    - name: rrdcached
+      lineinfile:
+        dest: /etc/rc.conf
+        line: '{{ item.key }}="{{ item.value }}"'
+        regexp: '^{{ item.key }} *='
+      with_dict:
+        rrdcached_enable: 'YES'
+        rrdcached_flags: '-s _librenms -l /var/run/rrdcached.sock -p /var/run/rrdcached.pid -b /var/db/librenms/rrd/ -U _librenms -G _librenms'
+    - name: launch rrdcached
+      service:
+        name: rrdcached
+        state: started
+        enabled: yes
+    - name: /usr/local/www/librenms/.env
+      template:
+        src: files/librenms/dotenv.j2
+        dest: '{{ codedir }}/.env'
+        backup: yes
+    - name: validate
+      command: 'php validate.php'
+      args:
+        chdir: '{{ codedir }}'
+    - name: chown logs
+      file:
+        state: directory
+        owner: librenms
+        group: _librenms
+        mode: '0770'
+        path: '{{ codedir }}/logs'
+    - name: DB update/install
+      command: './build-base.php'
+      become_user: '_librenms'
+      become_method: su
+      args:
+        chdir: /usr/local/www/librenms
+    - name: chmod
+      file:
+        path: '/usr/local/www/librenms/{{ item }}'
+        mode: '0750'
+        owner: librenms
+        group: _librenms
+      loop:
+        - cronic
+        - discovery-wrapper.py
+        - poller-wrapper.py</code></pre>
+        <aside>Tâches spécifiques à l'appli</aside>
+	</section>
+</section>
+<section id="et_alors">
+	<section><h3>Questions…</h3>
+		<ul>
+			<li class="fragment">Une interface <b>simple d'usage</b> juste pour lire/modifier l'inventory ?</li>
+			<li class="fragment">Rôles réutilisables ailleurs ?</li>
+			<li class="fragment">Utiliser ansible-vault ?</li>
+		</ul>
+		<aside>C'est moi qui pose les questions…
+  Rôles: réutilisables si simples ou  {{ cloud-based }} ?</aside>
+	</section>
+	<section><h3>Questions ?</h3>
+		<ul>
+	  		<address><a href="mailto:Geoffroy Desvernay <dgeo+prezansible@centrale-marseille.fr>">Geoffroy Desvernay <dgeo@centrale-marseille.fr></a></address>
+		</ul>
+		<aside> ?</aside>
+	</section>
+</section>
+
 			</div>
 		</div>
 
@@ -42,7 +283,10 @@
 					{ src: 'plugin/markdown/markdown.js' },
 					{ src: 'plugin/notes/notes.js', async: true },
 					{ src: 'plugin/highlight/highlight.js', async: true }
-				]
+				],
+				progress: true,
+				autoSlide: 0,
+previewLinks: true,
 			});
 		</script>
 	</body>
